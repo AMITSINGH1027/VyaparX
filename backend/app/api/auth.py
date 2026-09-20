@@ -433,6 +433,7 @@ def login(
 
         biz_dict = {
             "id": user.owned_business.id,
+            "unique_code": user.owned_business.unique_code,
             "name": user.owned_business.name,
             "currency": user.owned_business.currency,
             "currency_symbol": user.owned_business.currency_symbol,
