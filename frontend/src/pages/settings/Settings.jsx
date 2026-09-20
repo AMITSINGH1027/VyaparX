@@ -52,10 +52,10 @@ export const Settings = () => {
   }, [business]);
 
   const handleCopyBusinessCode = async () => {
-    if (!business?.id) return;
+    if (!business?.unique_code) return;
 
     try {
-      await navigator.clipboard.writeText(business.id);
+      await navigator.clipboard.writeText(business.unique_code);
 
       setCopied(true);
 
@@ -68,7 +68,7 @@ export const Settings = () => {
       // Fallback for browsers where clipboard API is unavailable
       try {
         const textArea = document.createElement('textarea');
-        textArea.value = business.id;
+        textArea.value = business.unique_code;
 
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
@@ -182,7 +182,7 @@ export const Settings = () => {
         <div className="bg-white dark:bg-surface-900 rounded-2xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs">
 
           {/* Business Unique Code */}
-          {isOwner && business?.id && (
+          {isOwner && business?.unique_code && (
             <div className="mb-6 rounded-xl border border-brand-500/20 bg-brand-50 dark:bg-brand-950/20 p-4">
 
               <div className="flex items-start gap-3">
@@ -207,7 +207,7 @@ export const Settings = () => {
                     <div className="flex-1 min-w-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-800 px-3 py-2.5">
 
                       <code className="block text-xs font-bold tracking-wide text-brand-600 dark:text-brand-400 break-all">
-                        {business.id}
+                        {business.unique_code}
                       </code>
 
                     </div>
