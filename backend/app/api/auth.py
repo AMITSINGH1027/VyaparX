@@ -170,15 +170,6 @@ def register(
     db.refresh(business)
 
     # --------------------------------------------------------
-    # Business Unique Code
-    #
-    # No extra DB column is required.
-    # Business UUID itself is used as unique code.
-    # --------------------------------------------------------
-
-    unique_code = str(business.id).upper()
-
-    # --------------------------------------------------------
     # Create Tokens
     # --------------------------------------------------------
 
