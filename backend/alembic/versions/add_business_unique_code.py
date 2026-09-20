@@ -30,8 +30,8 @@ def upgrade():
         sa.Column(
             "unique_code",
             sa.String(length=20),
-            nullable=True
-        )
+            nullable=True,
+        ),
     )
 
     # Generate codes for existing businesses
@@ -52,15 +52,23 @@ def upgrade():
         """
     )
 
-    # Move sequence after existing records
+    # Move sequence after existing records.
+    #
+    # PostgreSQL sequences cannot have 0 as their current value.
+    # If there are no businesses, leave the sequence at its
+    # initial value so the first nextval() returns 1.
     op.execute(
         """
         SELECT setval(
             'vyaparx_business_code_seq',
-            COALESCE(
-                (SELECT COUNT(*) FROM businesses),
-                0
-            )
+            GREATEST(
+                COALESCE(
+                    (SELECT COUNT(*) FROM businesses),
+                    0
+                ),
+                1
+            ),
+            false
         )
         """
     )
@@ -72,14 +80,14 @@ def upgrade():
         server_default=sa.text(
             "'VYPR-' || LPAD(nextval('vyaparx_business_code_seq')::text, 4, '0')"
         ),
-        nullable=False
+        nullable=False,
     )
 
     # Unique constraint
     op.create_unique_constraint(
         "uq_businesses_unique_code",
         "businesses",
-        ["unique_code"]
+        ["unique_code"],
     )
 
 
@@ -87,12 +95,12 @@ def downgrade():
     op.drop_constraint(
         "uq_businesses_unique_code",
         "businesses",
-        type_="unique"
+        type_="unique",
     )
 
     op.drop_column(
         "businesses",
-        "unique_code"
+        "unique_code",
     )
 
     op.execute(
