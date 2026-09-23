@@ -2,8 +2,10 @@ from typing import List, Optional
 from datetime import datetime, timezone, date
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+
 
 from app.core.database import get_db
 from app.core.config import settings
