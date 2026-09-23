@@ -14,3 +14,5 @@ joblib==1.5.3
 psycopg[binary]==3.3.3
 python-multipart==0.0.20
 APScheduler==3.11.0
+google-auth==2.58.0
+requests==2.34.2
