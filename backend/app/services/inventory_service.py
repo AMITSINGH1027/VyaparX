@@ -1,11 +1,14 @@
-from typing import Optional, List
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+
 from app.models.product import Product
 from app.models.inventory import InventoryMovement, MovementType
 from app.models.notification import NotificationType
 from app.services.notification_service import create_notification
 from app.services.audit_service import log_activity
+
 
 def record_inventory_movement(
     db: Session,
@@ -16,15 +19,24 @@ def record_inventory_movement(
     reference_id: Optional[str] = None,
     notes: Optional[str] = None,
     user_id: Optional[str] = None,
-    allow_negative: bool = False
+    allow_negative: bool = False,
 ) -> InventoryMovement:
-    product = db.query(Product).filter(
-        Product.id == product_id,
-        Product.business_id == business_id
-    ).with_for_update().first()
+
+    product = (
+        db.query(Product)
+        .filter(
+            Product.id == product_id,
+            Product.business_id == business_id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found",
+        )
 
     prev_stock = product.current_stock
     new_stock = prev_stock + quantity_change
@@ -32,12 +44,18 @@ def record_inventory_movement(
     if new_stock < 0 and not allow_negative:
         raise HTTPException(
             status_code=400,
-            detail=f"Insufficient inventory for {product.name}. Available: {prev_stock}, Requested: {-quantity_change}"
+            detail=(
+                f"Insufficient inventory for {product.name}. "
+                f"Available: {prev_stock}, "
+                f"Requested: {-quantity_change}"
+            ),
         )
 
+    # Update product stock
     product.current_stock = new_stock
     db.add(product)
 
+    # Record inventory movement
     movement = InventoryMovement(
         business_id=business_id,
         product_id=product_id,
@@ -47,12 +65,17 @@ def record_inventory_movement(
         new_stock=new_stock,
         reference_id=reference_id,
         notes=notes,
-        created_by_user_id=user_id
+        created_by_user_id=user_id,
     )
+
     db.add(movement)
     db.flush()
 
-    # Check for Low Stock / Out of Stock alerts
+    # ============================================================
+    # Automatic Low Stock / Out of Stock Notifications
+    # ============================================================
+
+    # OUT OF STOCK
     if new_stock == 0:
         create_notification(
             db=db,
@@ -61,19 +84,37 @@ def record_inventory_movement(
             title="Out of Stock Alert",
             message=f"{product.name} is completely out of stock!",
             link="/inventory",
-            user_id=user_id
+            user_id=user_id,
+            source_type="PRODUCT_OUT_OF_STOCK",
+            source_id=str(product.id),
         )
+
+    # LOW STOCK
     elif new_stock <= product.min_stock_alert:
-        recommended = max(10, product.min_stock_alert * 2 - new_stock)
+        recommended = max(
+            10,
+            product.min_stock_alert * 2 - new_stock,
+        )
+
         create_notification(
             db=db,
             business_id=business_id,
             type=NotificationType.LOW_STOCK,
             title="Low Stock Alert",
-            message=f"{product.name} is running low ({new_stock} units left). Recommended purchase: {recommended} units.",
+            message=(
+                f"{product.name} is running low "
+                f"({new_stock} units left). "
+                f"Recommended purchase: {recommended} units."
+            ),
             link="/inventory",
-            user_id=user_id
+            user_id=user_id,
+            source_type="PRODUCT_LOW_STOCK",
+            source_id=str(product.id),
         )
+
+    # ============================================================
+    # Audit Log
+    # ============================================================
 
     log_activity(
         db=db,
@@ -82,7 +123,10 @@ def record_inventory_movement(
         resource_type="Product",
         resource_id=product_id,
         user_id=user_id,
-        details=f"Stock changed from {prev_stock} to {new_stock} ({quantity_change:+d})"
+        details=(
+            f"Stock changed from {prev_stock} "
+            f"to {new_stock} ({quantity_change:+d})"
+        ),
     )
 
     return movement
