@@ -1,4 +1,5 @@
 import json
+
 from pathlib import Path
 from typing import List
 
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = ""
     JWT_REFRESH_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
+
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
@@ -37,6 +39,12 @@ class Settings(BaseSettings):
     )
 
     ML_MODELS_DIR: str = "./ml_models"
+
+    # ============================================================
+    # GOOGLE OAUTH
+    # ============================================================
+
+    GOOGLE_CLIENT_ID: str = ""
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -56,12 +64,18 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             try:
                 parsed = json.loads(value)
+
                 if isinstance(parsed, list):
                     return parsed
+
             except json.JSONDecodeError:
                 pass
 
-            return [item.strip() for item in value.split(",") if item.strip()]
+            return [
+                item.strip()
+                for item in value.split(",")
+                if item.strip()
+            ]
 
         return value
 
@@ -82,6 +96,7 @@ class Settings(BaseSettings):
 
     def validate_runtime_config(self) -> None:
         if self.ENVIRONMENT.lower() in {"production", "prod"}:
+
             if not self.DATABASE_URL.startswith(
                 (
                     "postgres://",
@@ -93,7 +108,10 @@ class Settings(BaseSettings):
                     "Production requires a PostgreSQL DATABASE_URL"
                 )
 
-            if len(self.JWT_SECRET) < 32 or len(self.JWT_REFRESH_SECRET) < 32:
+            if (
+                len(self.JWT_SECRET) < 32
+                or len(self.JWT_REFRESH_SECRET) < 32
+            ):
                 raise RuntimeError(
                     "Production JWT secrets must each be at least 32 characters"
                 )
