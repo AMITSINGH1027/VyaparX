@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-
+from app.services.email_service import send_password_reset_email
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -16,6 +16,8 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    create_password_reset_token,
+    decode_password_reset_token,
 )
 
 from app.core.dependencies import (
@@ -461,14 +463,44 @@ def social_login(
     if not google_client_id:
         raise HTTPException(status_code=500, detail="Google authentication is not configured")
 
+    # Verify the Google ID token against the exact OAuth Web Client ID.
     try:
         google_user = id_token.verify_oauth2_token(
-            request.id_token,
+            request.id_token.strip(),
             google_requests.Request(),
-            google_client_id,
+            google_client_id.strip(),
         )
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid or expired Google identity token")
+    except ValueError as exc:
+        print(f"Google token verification failed: {exc}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Google identity token",
+        )
+    except Exception as exc:
+        print(f"Google authentication error: {exc}")
+        raise HTTPException(
+            status_code=401,
+            detail="Google authentication failed",
+        )
+
+    # Extra issuer validation.
+    issuer = google_user.get("iss")
+    if issuer not in (
+        "accounts.google.com",
+        "https://accounts.google.com",
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Google token issuer",
+        )
+
+    # Extra audience validation.
+    audience = google_user.get("aud")
+    if audience != google_client_id.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Google token audience does not match configured client",
+        )
 
     provider_user_id = google_user.get("sub")
     email = google_user.get("email")
@@ -655,41 +687,53 @@ def forgot_password(
     user = (
         db.query(User)
         .filter(
-            User.email == req.email.lower()
+            User.email == req.email.lower().strip()
         )
         .first()
     )
 
-    # --------------------------------------------------------
     # Do not reveal whether email exists
-    # --------------------------------------------------------
-
     if not user:
         return MessageResponse(
             success=True,
             message=(
                 "If that email is registered, "
                 "password reset instructions "
-                "have been generated."
+                "have been sent."
             ),
         )
 
-    reset_token = create_access_token(
-        user.id,
-        role=user.role.value,
+    # Create a dedicated password-reset token.
+    # This token is valid for 15 minutes and cannot
+    # be used as a normal access token.
+    reset_token = create_password_reset_token(
+        user.id
     )
+
+    reset_url = (
+        f"{settings.FRONTEND_URL}/reset-password"
+        f"?token={reset_token}"
+    )
+
+    try:
+        send_password_reset_email(
+            recipient_email=user.email,
+            reset_url=reset_url,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to send password reset email",
+        )
 
     return MessageResponse(
         success=True,
         message=(
-            "Password reset token "
-            "generated successfully"
+            "If that email is registered, "
+            "password reset instructions "
+            "have been sent."
         ),
-        data={
-            "reset_token": reset_token,
-        },
     )
-
 
 # ============================================================
 # RESET PASSWORD
@@ -703,7 +747,7 @@ def reset_password(
     req: PasswordResetConfirm,
     db: Session = Depends(get_db),
 ):
-    payload = decode_token(
+    payload = decode_password_reset_token(
         req.token
     )
 
@@ -714,6 +758,12 @@ def reset_password(
         )
 
     user_id = payload.get("sub")
+
+    if not user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset token",
+        )
 
     user = (
         db.query(User)
@@ -727,10 +777,8 @@ def reset_password(
             detail="User not found",
         )
 
-    user.hashed_password = (
-        get_password_hash(
-            req.new_password
-        )
+    user.hashed_password = get_password_hash(
+        req.new_password
     )
 
     user.auth_provider = "local"
@@ -745,7 +793,6 @@ def reset_password(
             "Please login."
         ),
     )
-
 
 # ============================================================
 # LIST BUSINESS USERS

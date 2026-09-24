@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     ADMIN_LAST_NAME: str = "Administrator"
     BOOTSTRAP_ADMIN: bool = False
 
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = "Singhamit39062@gmail.com"
+    SMTP_PASSWORD: str = "uwfusbbwcmfnwpck"
+    SMTP_FROM_EMAIL: str = "Singhamit39062@gmail.com"
+    SMTP_FROM_NAME: str = "VyaparX"
+    FRONTEND_URL: str = "http://localhost:5173"
+
     CORS_ORIGINS: List[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]
     )
